@@ -1,0 +1,22 @@
+<schema name="goddess" version="1.6">
+  <uniqueKey>id</uniqueKey>
+  <types>
+    <fieldType name="string" class="solr.StrField" sortMissingLast="true"/>
+    <fieldType name="int" class="solr.TrieIntField" precisionStep="0"/>
+    <fieldType name="float" class="solr.TrieFloatField" precisionStep="0"/>
+    <fieldType name="text" class="solr.TextField">
+      <analyzer>
+        <tokenizer class="solr.StandardTokenizerFactory"/>
+        <filter class="solr.LowerCaseFilterFactory"/>
+      </analyzer>
+    </fieldType>
+  </types>
+  <fields>
+    <field name="id" type="string" indexed="true" stored="true" required="true"/>
+    <field name="name" type="string" indexed="true" stored="true"/>
+    <field name="age" type="int" indexed="true" stored="true"/>
+    <field name="description" type="text" indexed="true" stored="true"/>
+    <field name="occupation" type="text" indexed="true" stored="true" multiValued="true"/>
+    <field name="rate" type="float" indexed="true" stored="true"/>
+  </fields>
+</schema>

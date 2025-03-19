@@ -1,0 +1,40 @@
+services:
+  solr5:
+    image: solr:5.5.5
+    ports:
+      - "8983:8983"
+    volumes:
+      - ./solr-configs/solr5:/opt/solr/server/solr/goddess/conf
+    command: solr-precreate goddess /opt/solr/server/solr/goddess
+
+  solr6:
+    image: solr:6.6.6
+    ports:
+      - "8984:8983"
+    volumes:
+      - ./solr-configs/solr6:/opt/solr/server/solr/goddess/conf
+    command: solr-precreate goddess /opt/solr/server/solr/goddess
+
+  solr7:
+    image: solr:7.7.3
+    ports:
+      - "8985:8983"
+    volumes:
+      - ./solr-configs/solr7:/opt/solr/server/solr/goddess/conf
+    command: solr-precreate goddess /opt/solr/server/solr/goddess
+
+  solr8:
+    image: solr:8.11.4
+    ports:
+      - "8986:8983"
+    volumes:
+      - ./solr-configs/solr8:/opt/solr/server/solr/goddess/conf
+    command: solr-precreate goddess /opt/solr/server/solr/goddess
+
+  solr9:
+    image: solr:9.8.1
+    ports:
+      - "8987:8983"
+    volumes:
+      - ./solr-configs/solr9:/opt/solr/server/solr/goddess/conf
+    command: solr-precreate goddess /opt/solr/server/solr/goddess
