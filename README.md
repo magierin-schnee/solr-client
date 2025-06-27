@@ -1,60 +1,85 @@
-# Solr Client
+# @magierin-schnee/solr-client
 
-Solr Client is a powerful and flexible Node.js library designed to interact seamlessly with Apache Solr. It offers a simple, intuitive API for performing essential Solr operations such as adding, updating, deleting, and searching documents, as well as managing collections and executing advanced queries. Whether you're indexing data, retrieving documents, or building complex search functionality, this library has you covered.
+<p align="center">
+  <a href="https://www.npmjs.com/package/@magierin-schnee/solr-client"><img src="https://img.shields.io/npm/v/@magierin-schnee/solr-client.svg" alt="NPM Version"></a>
+  <a href="https://github.com/magierin-schnee/solr-client/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/@magierin-schnee/solr-client.svg" alt="License"></a>
+</p>
 
-## Features
+A powerful and flexible Node.js client for Apache Solr, offering an intuitive API for document management, advanced querying, and collection administration.
 
-- Easy Setup: Quickly connect to your Solr instance with minimal configuration.
-- Document Management: Add, update, and delete documents with straightforward methods.
-- Powerful Querying: Build sophisticated queries using a fluent API.
-- Streaming Support: Efficiently add documents via streams.
-- Collection Management: Administer Solr collections with ease.
-- Error Handling: Robust promise-based error handling for reliable operations.
+---
 
-## Installation
+## ✨ Features
 
-Install the Solr Client library via npm:
+- **Easy Setup**: Connect to Solr with minimal configuration.
+- **Full-Featured Document API**: Add, update, and delete documents with simple, chainable methods.
+- **Powerful Query Builder**: Construct sophisticated queries with a fluent API.
+- **Streaming Support**: Efficiently index large datasets via streams.
+- **Collection Management**: Administer SolrCloud collections with ease.
+- **Robust Error Handling**: Modern `async/await` and promise-based error handling for reliable operations.
 
-```
+---
+
+## 🚀 Getting Started
+
+### 1. Installation
+
+Install the library using your favorite package manager:
+
+<details>
+<summary>npm</summary>
+
+```bash
 npm install @magierin-schnee/solr-client
 ```
 
-Or, if you prefer Yarn:
+</details>
 
-```
+<details>
+<summary>Yarn</summary>
+
+```bash
 yarn add @magierin-schnee/solr-client
 ```
 
-## Getting Started
+</details>
 
-### Creating a Client
+<details>
+<summary>pnpm</summary>
 
-To begin, create a new Solr client instance by importing the createClient function and providing configuration options:
+```bash
+pnpm add @magierin-schnee/solr-client
+```
 
-```js
-const { createClient } = require('@magierin-schnee/solr-client')
+</details>
 
+### 2. Creating a Client
+
+To begin, import `createClient` and instantiate a new client with your Solr instance's configuration.
+
+```typescript
+import { createClient } from '@magierin-schnee/solr-client'
+
+// Connect to your Solr instance
 const client = createClient({
-  host: '127.0.0.1', // Solr server hostname
-  port: '8983', // Solr server port
-  core: 'my_core', // Solr core name
-  path: '/solr', // Path to Solr instance
-  secure: false, // Use HTTPS (true/false)
-  bigint: false, // Handle big integers (true/false)
+  host: '127.0.0.1',  // Solr server hostname (defaults to '127.0.0.1')
+  port: 8983,         // Solr server port (defaults to 8983)
+  core: 'my_core',    // Solr core or collection name
+  path: '/solr',      // Path to the Solr API (defaults to '/solr')
+  secure: false,      // Use HTTPS (defaults to false)
+  bigint: false,      // Use json-bigint for parsing (defaults to false)
 })
 ```
 
-### Authentication
+### 3. Authentication
 
-Set basic authentication credentials if your Solr instance requires it:
+If your Solr instance requires authentication, you can set the credentials on the client.
 
-```js
-client.setBasicAuth('username', 'password')
-```
+```typescript
+// Set basic authentication credentials
+client.setBasicAuth('your_username', 'your_password')
 
-Clear authentication credentials when no longer needed:
-
-```js
+// To remove authentication
 client.clearAuth()
 ```
 
@@ -88,7 +113,7 @@ Fetch documents by their IDs with getDocumentsById:
 ```js
 // Single document
 const response = await client.getDocumentsById('1')
-console.log(response.response.docs) // [{ id: '1', name: 'Example Document' }]
+console.log(response.response.docs)
 
 // Multiple documents
 const multiResponse = await client.getDocumentsById(['1', '2', '3'])
@@ -185,7 +210,7 @@ Build complex queries using the Query class and its fluent API:
 const query = client
   .createQuery()
   .setQuery('*:*') // Main query
-  .addMatchFilter('age', 25) // Exact match filter
+  .addFilter('age:25') // Exact match filter
   .setOffset(0) // Starting index
   .setLimit(10) // Max results
   .setSort({ score: 'desc' }) // Sort by score descending
@@ -196,19 +221,185 @@ console.log(response.response.docs)
 
 ### Key Query Methods
 
-| Method                       | Description                              | Example                                       |
-| ---------------------------- | ---------------------------------------- | --------------------------------------------- |
-| setQuery(query)              | Sets the main query string or object.    | .setQuery('name:Example')                     |
-| addMatchFilter(field, value) | Adds an exact match filter.              | .addMatchFilter('age', 25)                    |
-| addFilters(filters)          | Adds one or more filters.                | .addFilters({ field: 'cat', value: 'book' })  |
-| setOffset(offset)            | Sets the starting offset for pagination. | .setOffset(10)                                |
-| setLimit(limit)              | Limits the number of results.            | .setLimit(20)                                 |
-| setSort(fields)              | Defines sort order.                      | .setSort({ score: 'desc' })                   |
-| setResponseFields(fields)    | Specifies fields to return.              | .setResponseFields(['id', 'name'])            |
-| setFacets(config)            | Configures faceting.                     | .setFacets({ on: true, field: 'cat' })        |
-| setHighlighting(config)      | Configures highlighting.                 | .setHighlighting({ on: true, fl: 'content' }) |
+| Method                    | Description                               | Example                                                                |
+| ------------------------- | ----------------------------------------- | ---------------------------------------------------------------------- |
+| setQuery(query)           | Sets the main query string or object.     | .setQuery('name:Example')                                              |
+| addFilter(filter)         | Adds a filter query (`fq`).               | .addFilter('category:books')                                           |
+| addFilters(filters)       | Adds multiple filter queries.             | .addFilters(['inStock:true', 'price:[* TO 100]'])                      |
+| setOffset(offset)         | Sets the starting offset for pagination.  | .setOffset(10)                                                         |
+| setLimit(limit)           | Limits the number of results.             | .setLimit(20)                                                          |
+| setSort(fields)           | Defines sort order.                       | .setSort({ score: 'desc' })                                            |
+| setResponseFields(fields) | Specifies fields to return.               | .setResponseFields(['id', 'name'])                                     |
+| setFacets(config)         | Configures faceting using JSON Facet API. | .setFacets({ categories: { type: 'terms', field: 'cat', limit: 10 } }) |
+| setHighlighting(config)   | Configures highlighting.                  | .setHighlighting({ on: true, fl: 'content' })                          |
 
 For more advanced options (e.g., grouping, spellchecking), refer to the source code.
+
+## Advanced Facets
+
+The client supports Solr's powerful JSON Facet API, allowing you to build complex faceting logic. Use the `setFacets` method to define your facet structure.
+
+### Terms Facet
+
+A terms facet computes counts for each unique term in a field. This is useful for creating category or tag clouds.
+
+**Example:** Get the document count for each category.
+
+```js
+const query = client
+  .createQuery()
+  .setQuery('*:*')
+  .setLimit(0) // We only want the results of the facets
+  .setFacets({
+    category: {
+      type: 'terms',
+      field: 'category',
+      limit: 10,
+      mincount: 1,
+    },
+  })
+
+const response = await client.searchDocuments(query)
+console.log(response.facets)
+```
+
+**Expected Response:**
+
+```json
+{
+  "count": 150,
+  "category": {
+    "buckets": [
+      { "val": "electronics", "count": 75 },
+      { "val": "books", "count": 50 },
+      { "val": "clothes", "count": 25 }
+    ]
+  }
+}
+```
+
+### Range Facet
+
+A range facet groups documents into buckets based on a numeric or date field.
+
+**Example:** Group documents by price ranges.
+
+```js
+const query = client
+  .createQuery()
+  .setQuery('*:*')
+  .setLimit(0)
+  .setFacets({
+    price: {
+      type: 'range',
+      field: 'price',
+      start: 0,
+      end: 1000,
+      gap: 100,
+    },
+  })
+
+const response = await client.searchDocuments(query)
+console.log(response.facets)
+```
+
+**Expected Response:**
+
+```json
+{
+  "count": 150,
+  "price": {
+    "buckets": [
+      { "val": 0, "count": 20 },
+      { "val": 100, "count": 35 },
+      { "val": 200, "count": 15 }
+    ]
+  }
+}
+```
+
+### Query Facet
+
+A query facet returns a count for any arbitrary query. You can have multiple query facets.
+
+**Example:** Count documents that are in stock.
+
+```js
+const query = client
+  .createQuery()
+  .setQuery('*:*')
+  .setLimit(0)
+  .setFacets({
+    inStock: {
+      type: 'query',
+      q: 'inStock:true',
+    },
+  })
+
+const response = await client.searchDocuments(query)
+console.log(response.facets)
+```
+
+**Expected Response:**
+
+```json
+{
+  "count": 150,
+  "inStock": {
+    "count": 120
+  }
+}
+```
+
+### Nested facets
+
+You can nest facets to create more complex aggregations. For example, you can calculate statistics for sub-facets.
+
+**Example:** Create facets by publication date ranges using query facets.
+
+```js
+const query = client
+  .createQuery()
+  .setQuery('*:*')
+  .setLimit(0)
+  .setFacets({
+    publicationDate: {
+      type: 'query',
+      q: '*:*',
+      facet: {
+        today: {
+          type: 'query',
+          q: 'publicationDate:[NOW/DAY TO NOW]',
+        },
+        last7Days: {
+          type: 'query',
+          q: 'publicationDate:[NOW-7DAY/DAY TO NOW]',
+        },
+        last30Days: {
+          type: 'query',
+          q: 'publicationDate:[NOW-30DAY/DAY TO NOW]',
+        },
+      },
+    },
+  })
+
+const response = await client.searchDocuments(query)
+console.log(response.facets)
+```
+
+**Expected Response:**
+
+```json
+{
+  "count": 150,
+  "publicationDate": {
+    "count": 150,
+    "today": { "count": 5 },
+    "last7Days": { "count": 25 },
+    "last30Days": { "count": 80 }
+  }
+}
+```
 
 ## Streaming Documents
 
@@ -276,11 +467,16 @@ console.log(safeQuery) // "query with \+special chars"
 All methods return promises that resolve with response data or reject with errors. Use try-catch blocks for robust error handling:
 
 ```js
+import { SolrError } from '@magierin-schnee/solr-client'
+
 try {
-  const response = await client.addDocuments(document)
-  console.log('Success:', response)
+  await client.addDocuments(document)
 } catch (error) {
-  console.error('Error:', error.message)
+  if (error instanceof SolrError) {
+    console.error('Http Status Code:', error.httpStatusCode)
+    console.error('Message:', error.message)
+    console.error('Metadata:', error.metadata)
+  }
 }
 ```
 

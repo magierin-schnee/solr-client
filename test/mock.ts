@@ -1,4 +1,6 @@
-export interface Goddess {
+import { SolrDocument } from '../src/types'
+
+export interface Goddess extends SolrDocument {
   id: string
   name: string
   age: number

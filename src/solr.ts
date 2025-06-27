@@ -5,53 +5,16 @@ import { Writable } from 'stream'
 import { Client as UndiciClient } from 'undici'
 import { Collection } from './collection'
 import {
-  CompleteSolrClientConfig,
-  DocumentAddResponse,
+  ResolvedSolrClientConfig,
   HttpRequestOptions,
   SolrClientConfig,
-  SolrCommonResponse,
-  SolrJsonResponse,
+  SolrError,
   SolrResourceConfig,
+  SolrApiResponse,
+  SolrErrorBody,
 } from './types'
 import { convertDatesToISO, escapeLuceneChars } from './utils'
 import { Query } from './query'
-
-/**
- * Represents the result of a Solr search query.
- * @template T The type of documents returned.
- */
-export interface SearchResult<T> {
-  /** Array of documents matching the query */
-  docs: T[]
-  /** Total number of documents found */
-  numFound: number
-  /** Indicates if numFound is exact or an estimate */
-  numFoundExact: boolean
-  /** Starting index of the returned documents */
-  start: number
-}
-
-/**
- * Response structure for a Solr search operation.
- * @template T The type of documents returned.
- */
-export interface SearchResponse<T> {
-  /** Optional debug information */
-  debug?: Record<string, any>
-  /** Cursor mark for pagination, if used */
-  nextCursorMark?: string
-  /** Search results */
-  response: SearchResult<T>
-  /** Metadata about the response */
-  responseHeader: {
-    /** Query execution time in milliseconds */
-    QTime: number
-    /** Query parameters, if any */
-    params?: Record<string, any>
-    /** Status code (0 for success) */
-    status: number
-  }
-}
 
 /**
  * Selects a JSON handler based on whether big integers need to be supported.
@@ -76,7 +39,7 @@ export function createClient(options: SolrClientConfig = {}): Client {
  */
 export class Client {
   /** Configuration options for the client */
-  private readonly config: CompleteSolrClientConfig
+  private readonly config: ResolvedSolrClientConfig
 
   /** Mapping of handler names to their default paths */
   private readonly handlers: Record<string, string>
@@ -96,12 +59,10 @@ export class Client {
       path: config.path || '/solr',
       secure: config.secure || false,
       bigint: config.bigint || false,
-      get_max_request_entity_size: config.get_max_request_entity_size || false,
       ipVersion: config.ipVersion == 6 ? 6 : 4,
       request: config.request || null,
     }
 
-    // Define handler paths based on Solr version
     this.handlers = {
       UPDATE: 'update',
       SELECT: 'select',
@@ -112,7 +73,6 @@ export class Client {
       TERMS: 'terms',
     }
 
-    // Construct base URL using secure flag
     const protocol = this.config.secure ? 'https' : 'http'
     const baseUrl = `${protocol}://${this.config.host}:${this.config.port}`
     this.httpClient = new UndiciClient(baseUrl, { connect: config.tls })
@@ -140,7 +100,7 @@ export class Client {
    * @param acceptContentType Expected response content type.
    * @returns Parsed JSON response.
    */
-  private async executeRequest<T = SolrJsonResponse>(
+  private async executeRequest<T = SolrApiResponse>(
     path: string,
     method: 'GET' | 'POST',
     body: string | null,
@@ -162,11 +122,22 @@ export class Client {
     const response = await this.httpClient.request({ path, ...requestOptions })
     const responseText = await response.body.text()
 
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw new Error(`HTTP error ${response.statusCode}: ${responseText}`)
+    const jsonResponse = getJSONHandler(this.config.bigint).parse(responseText)
+
+    if (response.statusCode >= 400 || jsonResponse.error) {
+      if (jsonResponse.error) {
+        throw new SolrError(response.statusCode, jsonResponse.error)
+      } else {
+        const fallbackErrorBody: SolrErrorBody = {
+          code: response.statusCode,
+          msg: `HTTP error ${response.statusCode}. No error details provided in response body.`,
+          metadata: [],
+        }
+        throw new SolrError(response.statusCode, fallbackErrorBody)
+      }
     }
 
-    return getJSONHandler(this.config.bigint).parse(responseText)
+    return jsonResponse
   }
 
   /**
@@ -198,11 +169,11 @@ export class Client {
   async addDocuments(
     documents: Record<string, any> | Record<string, any>[],
     params?: Record<string, any>,
-  ): Promise<DocumentAddResponse> {
+  ): Promise<SolrApiResponse> {
     const formattedDocs = convertDatesToISO(documents)
     const docsArray = Array.isArray(formattedDocs) ? formattedDocs : [formattedDocs]
 
-    return this.updateDocuments<DocumentAddResponse>(docsArray, params)
+    return this.updateDocuments<SolrApiResponse>(docsArray, params)
   }
 
   /** Alias for addDocuments, emphasizing atomic update capability. */
@@ -214,26 +185,18 @@ export class Client {
    * @param query Optional query parameters.
    * @returns Promise resolving to the search response.
    */
-  async getDocumentsById<T>(
+  async getDocumentsById(
     ids: string | string[],
-    query: Query | Record<string, any> | string = {},
-  ): Promise<SearchResponse<T>> {
+    params: Record<string, any> = {},
+  ): Promise<SolrApiResponse> {
     const idList = Array.isArray(ids) ? ids : [ids]
-    const idsParam = { ids: idList.join(',') }
-
-    let finalQuery: Query | Record<string, any> | string
-    if (query instanceof Query) {
-      query.addRawParameter(`ids=${encodeURIComponent(idsParam.ids)}`)
-      finalQuery = query
-    } else if (typeof query === 'object') {
-      finalQuery = { ...query, ...idsParam }
-    } else {
-      const params = new URLSearchParams(query)
-      params.append('ids', encodeURIComponent(idsParam.ids))
-      finalQuery = params.toString()
+    const queryParams = {
+      ...params,
+      ids: idList.join(','),
+      wt: 'json',
     }
 
-    return this.executeQuery(this.handlers.GET, finalQuery)
+    return this.executeQuery(this.handlers.GET, queryParams)
   }
 
   /**
@@ -241,7 +204,7 @@ export class Client {
    * @param options Configuration for the remote resource.
    * @returns Promise resolving to the response data.
    */
-  async addRemoteResource(options: SolrResourceConfig): Promise<SolrJsonResponse> {
+  async addRemoteResource(options: SolrResourceConfig): Promise<SolrApiResponse> {
     const params = options.parameters || {}
     params.commit = params.commit ?? false
     params['stream.contentType'] = options.contentType || 'text/plain;charset=utf-8'
@@ -261,7 +224,7 @@ export class Client {
    */
   createDocumentStream(options: Record<string, any> = {}): {
     stream: Writable
-    response: Promise<SolrJsonResponse>
+    response: Promise<SolrApiResponse>
   } {
     const searchParams = new URLSearchParams({
       ...options,
@@ -296,7 +259,7 @@ export class Client {
    * @param options Optional commit parameters.
    * @returns Promise resolving to the response data.
    */
-  async commit(options?: Record<string, any>): Promise<SolrJsonResponse> {
+  async commit(options?: Record<string, any>): Promise<SolrApiResponse> {
     return this.updateDocuments({ commit: options || {} })
   }
 
@@ -304,7 +267,7 @@ export class Client {
    * Prepares a commit without making changes visible.
    * @returns Promise resolving to the response data.
    */
-  async prepareCommit(): Promise<SolrJsonResponse> {
+  async prepareCommit(): Promise<SolrApiResponse> {
     return this.updateDocuments({}, { prepareCommit: true })
   }
 
@@ -312,7 +275,7 @@ export class Client {
    * Performs a soft commit of all changes.
    * @returns Promise resolving to the response data.
    */
-  async softCommit(): Promise<SolrJsonResponse> {
+  async softCommit(): Promise<SolrApiResponse> {
     return this.updateDocuments({}, { softCommit: true })
   }
 
@@ -327,7 +290,7 @@ export class Client {
     field: string,
     value: string,
     options?: Record<string, any>,
-  ): Promise<SolrJsonResponse> {
+  ): Promise<SolrApiResponse> {
     return this.updateDocuments(
       { delete: { query: `${field}:${escapeLuceneChars(convertDatesToISO(value))}` } },
       options,
@@ -347,7 +310,7 @@ export class Client {
     start: string | Date,
     end: string | Date,
     options?: Record<string, any>,
-  ): Promise<SolrJsonResponse> {
+  ): Promise<SolrApiResponse> {
     const startStr = convertDatesToISO(start)
     const endStr = convertDatesToISO(end)
 
@@ -360,7 +323,7 @@ export class Client {
    * @param options Optional parameters.
    * @returns Promise resolving to the response data.
    */
-  async deleteById(id: string | number, options?: Record<string, any>): Promise<SolrJsonResponse> {
+  async deleteById(id: string | number, options?: Record<string, any>): Promise<SolrApiResponse> {
     return this.updateDocuments({ delete: { id } }, options)
   }
 
@@ -370,7 +333,7 @@ export class Client {
    * @param options Optional parameters.
    * @returns Promise resolving to the response data.
    */
-  async deleteByQuery(query: string, options?: Record<string, any>): Promise<SolrJsonResponse> {
+  async deleteByQuery(query: string, options?: Record<string, any>): Promise<SolrApiResponse> {
     return this.updateDocuments({ delete: { query } }, options)
   }
 
@@ -379,7 +342,7 @@ export class Client {
    * @param options Optional parameters.
    * @returns Promise resolving to the response data.
    */
-  async deleteAllDocuments(options?: Record<string, any>): Promise<SolrJsonResponse> {
+  async deleteAllDocuments(options?: Record<string, any>): Promise<SolrApiResponse> {
     return this.deleteByQuery('*:*', options)
   }
 
@@ -388,7 +351,7 @@ export class Client {
    * @param options Optimization parameters.
    * @returns Promise resolving to the response data.
    */
-  async optimizeIndex(options: Record<string, any> = {}): Promise<SolrJsonResponse> {
+  async optimizeIndex(options: Record<string, any> = {}): Promise<SolrApiResponse> {
     return this.updateDocuments({ optimize: options })
   }
 
@@ -396,7 +359,7 @@ export class Client {
    * Rolls back uncommitted changes.
    * @returns Promise resolving to the response data.
    */
-  async rollbackChanges(): Promise<SolrJsonResponse> {
+  async rollbackChanges(): Promise<SolrApiResponse> {
     return this.updateDocuments({ rollback: {} })
   }
 
@@ -428,10 +391,8 @@ export class Client {
    * @param query The search query.
    * @returns Promise resolving to the search response.
    */
-  async searchDocuments<T>(
-    query: Query | Record<string, any> | string,
-  ): Promise<SearchResponse<T>> {
-    return this.executeQuery<SearchResponse<T>>(this.handlers.SELECT, query)
+  async searchDocuments(query: Query | Record<string, any> | string): Promise<SolrApiResponse> {
+    return this.executeQuery(this.handlers.SELECT, query)
   }
 
   /**
@@ -441,7 +402,7 @@ export class Client {
    */
   async manageCollection(
     collection: Collection | Record<string, any> | string,
-  ): Promise<SolrCommonResponse> {
+  ): Promise<SolrApiResponse> {
     return this.executeQuery(this.handlers.COLLECTIONS, collection)
   }
 
@@ -449,7 +410,7 @@ export class Client {
    * Searches for all documents in the index.
    * @returns Promise resolving to the response data.
    */
-  async searchAllDocuments(): Promise<SolrJsonResponse> {
+  async searchAllDocuments(): Promise<SolrApiResponse> {
     return this.searchDocuments('q=*:*')
   }
 
@@ -458,8 +419,8 @@ export class Client {
    * @param query The spellcheck query.
    * @returns Promise resolving to the response data.
    */
-  async spellCheck(query: Query): Promise<SolrJsonResponse> {
-    return this.executeQuery(this.handlers.SPELL, query)
+  async spellCheck(params: Record<string, any>): Promise<SolrApiResponse> {
+    return this.executeQuery(this.handlers.SPELL, params)
   }
 
   /**
@@ -467,12 +428,12 @@ export class Client {
    * @param query The terms query.
    * @returns Promise resolving to the response data.
    */
-  async searchTerms(query: Query | Record<string, any> | string): Promise<SolrJsonResponse> {
-    return this.executeQuery(this.handlers.TERMS, query)
+  async searchTerms(params: Record<string, any> | string): Promise<SolrApiResponse> {
+    return this.executeQuery(this.handlers.TERMS, params)
   }
 
   /**
-   * Executes a query against a Solr handler.
+   * Executes a query against a Solr handler, supporting both JSON Request API and parameter-based requests.
    * @param handler The handler to query.
    * @param query The query to execute.
    * @returns Promise resolving to the response.
@@ -481,30 +442,34 @@ export class Client {
     handler: string,
     query: Query | Collection | Record<string, any> | string,
   ): Promise<T> {
-    let queryData: string
-    if (query instanceof Query || query instanceof Collection) {
-      queryData = query.toString()
-    } else if (typeof query === 'object') {
-      queryData = new URLSearchParams(query).toString()
-    } else {
-      queryData = query
+    const path = this.buildHandlerPath(handler)
+
+    if (query instanceof Query) {
+      const jsonBody = getJSONHandler(this.config.bigint).stringify(query.toObject())
+      return this.executeRequest<T>(
+        `${path}?wt=json`,
+        'POST',
+        jsonBody,
+        'application/json',
+        'application/json; charset=utf-8',
+      )
     }
 
-    const path = this.buildHandlerPath(handler)
-    const queryString = queryData ? `${queryData}&wt=json` : 'wt=json'
-    const urlLength = Buffer.byteLength(path) + Buffer.byteLength(queryString) + 100 // Rough estimate
-    const method =
-      this.config.get_max_request_entity_size === false ||
-      (typeof this.config.get_max_request_entity_size === 'number' &&
-        urlLength <= this.config.get_max_request_entity_size)
-        ? 'GET'
-        : 'POST'
+    // For traditional parameter-based requests (Collection, Record<string, any>, string),
+    let queryString: string
+    if (query instanceof Collection) {
+      queryString = query.toQueryString()
+    } else if (typeof query === 'object') {
+      queryString = new URLSearchParams(query).toString()
+    } else {
+      queryString = query
+    }
 
     return this.executeRequest<T>(
-      method === 'GET' ? `${path}?${queryString}` : path,
-      method,
-      method === 'POST' ? queryData : null,
-      method === 'POST' ? 'application/x-www-form-urlencoded; charset=utf-8' : null,
+      path,
+      'POST',
+      queryString ? `${queryString}&wt=json` : 'wt=json',
+      'application/x-www-form-urlencoded; charset=utf-8',
       'application/json; charset=utf-8',
     )
   }
@@ -534,7 +499,7 @@ export class Client {
    * Pings the Solr server to check its status.
    * @returns Promise resolving to the ping response.
    */
-  async pingServer(): Promise<SolrJsonResponse> {
+  async pingServer(): Promise<SolrApiResponse> {
     return this.executeQuery(this.handlers.PING, '')
   }
 
@@ -544,20 +509,15 @@ export class Client {
    * @param fieldType The type of the field.
    * @returns Promise resolving to the response data or an empty object on error.
    */
-  async createSchemaField(fieldName: string, fieldType: string): Promise<SolrJsonResponse> {
-    try {
-      return await this.executeRequest(
-        this.buildHandlerPath('schema'),
-        'POST',
-        getJSONHandler(this.config.bigint).stringify({
-          'add-field': { name: fieldName, type: fieldType, multiValued: false, stored: true },
-        }),
-        'application/json',
-        'application/json; charset=utf-8',
-      )
-    } catch (error) {
-      console.warn(`Failed to create schema field: ${(error as Error).message}`)
-      return {}
-    }
+  async createSchemaField(fieldName: string, fieldType: string): Promise<SolrApiResponse> {
+    return this.executeRequest(
+      this.buildHandlerPath('schema'),
+      'POST',
+      getJSONHandler(this.config.bigint).stringify({
+        'add-field': { name: fieldName, type: fieldType, multiValued: false, stored: true },
+      }),
+      'application/json',
+      'application/json; charset=utf-8',
+    )
   }
 }

@@ -3,16 +3,12 @@
  * If the value is null or undefined, an array with a default value is returned.
  * Otherwise, the value is wrapped in an array.
  *
- * @template T - The type of elements in the resulting array.
- * @param value - The value to convert (can be a single item, array, null, or undefined).
- * @param defaultValue - The fallback value if the input is null or undefined (optional).
- * @returns An array containing the input value or default value.
+ * @param value - The value to convert to an array.
+ * @returns An array containing the input value, or an empty array if the input is null or undefined.
  */
-export function toArray<T>(value: T | T[] | null | undefined, defaultValue?: T): T[] {
+export function toArray<T>(value: T | T[] | null | undefined): T[] {
   if (Array.isArray(value)) return value
-
-  const fallback = defaultValue ?? ('' as unknown as T)
-  return value === null || value === undefined ? [fallback] : [value]
+  return value === null || value === undefined ? [] : [value]
 }
 
 /**

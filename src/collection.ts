@@ -7,7 +7,7 @@ import {
   MigrationConfig,
   ReplicaAddConfig,
   ReplicaDeleteConfig,
-  ReplicaPropertyAddConfig,
+  ReplicaPropertyConfig,
   ReplicaPropertyDeleteConfig,
   ShardBalanceConfig,
   ShardConfig,
@@ -19,6 +19,13 @@ import {
  */
 export class Collection {
   private parameters: string[] = []
+
+  private addParameter(key: string, value: any, encode = true): void {
+    if (value !== undefined && value !== null) {
+      const encodedValue = encode ? encodeURIComponent(String(value)) : String(value)
+      this.parameters.push(`${key}=${encodedValue}`)
+    }
+  }
 
   /**
    * Adds a raw, pre-encoded parameter to the collection configuration.
@@ -36,62 +43,25 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   create(config: CollectionCreateConfig): this {
-    this.parameters.push('action=CREATE')
-
-    if (config.name) {
-      this.parameters.push(`name=${encodeURIComponent(config.name)}`)
-    }
-
-    if (config.routerName) {
-      this.parameters.push(`router.name=${encodeURIComponent(config.routerName)}`)
-    }
-
-    if (config.numShards !== undefined) {
-      this.parameters.push(`numShards=${config.numShards}`)
-    }
-
-    if (config.shards) {
-      const shards = Array.isArray(config.shards) ? config.shards.join(',') : config.shards
-      this.parameters.push(`shards=${encodeURIComponent(shards)}`)
-    }
-
-    if (config.replicationFactor !== undefined) {
-      this.parameters.push(`replicationFactor=${config.replicationFactor}`)
-    }
-
-    if (config.maxShardsPerNode !== undefined) {
-      this.parameters.push(`maxShardsPerNode=${config.maxShardsPerNode}`)
-    }
-
-    if (config.createNodeSet) {
-      const nodeSet = Array.isArray(config.createNodeSet)
-        ? config.createNodeSet.join(',')
-        : config.createNodeSet
-      this.parameters.push(`createNodeSet=${encodeURIComponent(nodeSet)}`)
-    }
-
-    if (config.createNodeSetShuffle !== undefined) {
-      this.parameters.push(`createNodeSet.shuffle=${config.createNodeSetShuffle}`)
-    }
-
-    if (config.collectionConfigName) {
-      this.parameters.push(
-        `collection.configName=${encodeURIComponent(config.collectionConfigName)}`,
-      )
-    }
-
-    if (config.routerField) {
-      this.parameters.push(`router.field=${encodeURIComponent(config.routerField)}`)
-    }
-
-    if (config.autoAddReplicas !== undefined) {
-      this.parameters.push(`autoAddReplicas=${config.autoAddReplicas}`)
-    }
-
-    if (config.async) {
-      this.parameters.push(`async=${encodeURIComponent(config.async)}`)
-    }
-
+    this.addParameter('action', 'CREATE', false)
+    this.addParameter('name', config.name)
+    this.addParameter('router.name', config.routerName)
+    this.addParameter('numShards', config.numShards)
+    this.addParameter(
+      'shards',
+      Array.isArray(config.shards) ? config.shards.join(',') : config.shards,
+    )
+    this.addParameter('replicationFactor', config.replicationFactor)
+    this.addParameter('maxShardsPerNode', config.maxShardsPerNode)
+    this.addParameter(
+      'createNodeSet',
+      Array.isArray(config.createNodeSet) ? config.createNodeSet.join(',') : config.createNodeSet,
+    )
+    this.addParameter('createNodeSet.shuffle', config.createNodeSetShuffle)
+    this.addParameter('collection.configName', config.collectionConfigName)
+    this.addParameter('router.field', config.routerField)
+    this.addParameter('autoAddReplicas', config.autoAddReplicas)
+    this.addParameter('async', config.async)
     return this
   }
 
@@ -101,8 +71,8 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   reload(name: string): this {
-    this.parameters.push('action=RELOAD')
-    if (name) this.parameters.push(`name=${encodeURIComponent(name)}`)
+    this.addParameter('action', 'RELOAD', false)
+    this.addParameter('name', name)
     return this
   }
 
@@ -112,29 +82,15 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   splitShard(config: ShardSplitConfig): this {
-    this.parameters.push('action=SPLITSHARD')
-
-    if (config.collection) {
-      this.parameters.push(`collection=${encodeURIComponent(config.collection)}`)
-    }
-
-    if (config.shard) {
-      this.parameters.push(`shard=${encodeURIComponent(config.shard)}`)
-    }
-
-    if (config.ranges) {
-      const ranges = Array.isArray(config.ranges) ? config.ranges.join(',') : config.ranges
-      this.parameters.push(`ranges=${encodeURIComponent(ranges)}`)
-    }
-
-    if (config.splitKey) {
-      this.parameters.push(`split.key=${encodeURIComponent(config.splitKey)}`)
-    }
-
-    if (config.async) {
-      this.parameters.push(`async=${encodeURIComponent(config.async)}`)
-    }
-
+    this.addParameter('action', 'SPLITSHARD', false)
+    this.addParameter('collection', config.collection)
+    this.addParameter('shard', config.shard)
+    this.addParameter(
+      'ranges',
+      Array.isArray(config.ranges) ? config.ranges.join(',') : config.ranges,
+    )
+    this.addParameter('split.key', config.splitKey)
+    this.addParameter('async', config.async)
     return this
   }
 
@@ -144,16 +100,9 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   createShard(config: ShardConfig): this {
-    this.parameters.push('action=CREATESHARD')
-
-    if (config.collection) {
-      this.parameters.push(`collection=${encodeURIComponent(config.collection)}`)
-    }
-
-    if (config.shard) {
-      this.parameters.push(`shard=${encodeURIComponent(config.shard)}`)
-    }
-
+    this.addParameter('action', 'CREATESHARD', false)
+    this.addParameter('collection', config.collection)
+    this.addParameter('shard', config.shard)
     return this
   }
 
@@ -163,16 +112,9 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   deleteShard(config: ShardConfig): this {
-    this.parameters.push('action=DELETESHARD')
-
-    if (config.collection) {
-      this.parameters.push(`collection=${encodeURIComponent(config.collection)}`)
-    }
-
-    if (config.shard) {
-      this.parameters.push(`shard=${encodeURIComponent(config.shard)}`)
-    }
-
+    this.addParameter('action', 'DELETESHARD', false)
+    this.addParameter('collection', config.collection)
+    this.addParameter('shard', config.shard)
     return this
   }
 
@@ -182,19 +124,12 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   createAlias(config: AliasConfig): this {
-    this.parameters.push('action=CREATEALIAS')
-
-    if (config.name) {
-      this.parameters.push(`name=${encodeURIComponent(config.name)}`)
-    }
-
-    if (config.collections) {
-      const collections = Array.isArray(config.collections)
-        ? config.collections.join(',')
-        : config.collections
-      this.parameters.push(`collections=${encodeURIComponent(collections)}`)
-    }
-
+    this.addParameter('action', 'CREATEALIAS', false)
+    this.addParameter('name', config.name)
+    this.addParameter(
+      'collections',
+      Array.isArray(config.collections) ? config.collections.join(',') : config.collections,
+    )
     return this
   }
 
@@ -204,8 +139,8 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   deleteAlias(name: string): this {
-    this.parameters.push('action=DELETEALIAS')
-    if (name) this.parameters.push(`name=${encodeURIComponent(name)}`)
+    this.addParameter('action', 'DELETEALIAS', false)
+    this.addParameter('name', name)
     return this
   }
 
@@ -215,66 +150,40 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   delete(name: string): this {
-    this.parameters.push('action=DELETE')
-    if (name) this.parameters.push(`name=${encodeURIComponent(name)}`)
+    this.addParameter('action', 'DELETE', false)
+    this.addParameter('name', name)
     return this
   }
 
   /**
    * Deletes a replica from the collection.
-   * @param options Configuration for deleting the replica.
+   * @param config Configuration for deleting the replica.
    * @returns This instance for method chaining.
    */
   deleteReplica(config: ReplicaDeleteConfig): this {
-    this.parameters.push('action=DELETEREPLICA')
-
-    if (config.collection) {
-      this.parameters.push(`collection=${encodeURIComponent(config.collection)}`)
-    }
-
-    if (config.shard) {
-      this.parameters.push(`shard=${encodeURIComponent(config.shard)}`)
-    }
-
-    if (config.replica) {
-      this.parameters.push(`replica=${encodeURIComponent(config.replica)}`)
-    }
-
-    if (config.onlyIfDown !== undefined) {
-      this.parameters.push(`onlyIfDown=${config.onlyIfDown}`)
-    }
-
+    this.addParameter('action', 'DELETEREPLICA', false)
+    this.addParameter('collection', config.collection)
+    this.addParameter('shard', config.shard)
+    this.addParameter('replica', config.replica)
+    this.addParameter('onlyIfDown', config.onlyIfDown)
     return this
   }
 
   /**
    * Adds a replica to the collection.
+   * Note: For the ADDREPLICA action, 'collection' and 'shard' are typically mandatory in Solr.
+   * Ensure these are provided in the config object.
+   *
    * @param config Configuration for adding the replica.
    * @returns This instance for method chaining.
    */
   addReplica(config: ReplicaAddConfig): this {
-    this.parameters.push('action=ADDREPLICA')
-
-    if (config.collection) {
-      this.parameters.push(`collection=${encodeURIComponent(config.collection)}`)
-    }
-
-    if (config.shard) {
-      this.parameters.push(`shard=${encodeURIComponent(config.shard)}`)
-    }
-
-    if (config.route) {
-      this.parameters.push(`_route_=${encodeURIComponent(config.route)}`)
-    }
-
-    if (config.node) {
-      this.parameters.push(`node=${encodeURIComponent(config.node)}`)
-    }
-
-    if (config.async) {
-      this.parameters.push(`async=${encodeURIComponent(config.async)}`)
-    }
-
+    this.addParameter('action', 'ADDREPLICA', false)
+    this.addParameter('collection', config.collection)
+    this.addParameter('shard', config.shard)
+    this.addParameter('_route_', config.route)
+    this.addParameter('node', config.node)
+    this.addParameter('async', config.async)
     return this
   }
 
@@ -284,16 +193,9 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   setClusterProperty(config: ClusterPropertyConfig): this {
-    this.parameters.push('action=CLUSTERPROP')
-
-    if (config.name) {
-      this.parameters.push(`name=${encodeURIComponent(config.name)}`)
-    }
-
-    if (config.val !== undefined) {
-      this.parameters.push(`val=${encodeURIComponent(config.val)}`)
-    }
-
+    this.addParameter('action', 'CLUSTERPROP', false)
+    this.addParameter('name', config.name)
+    this.addParameter('val', config.val)
     return this
   }
 
@@ -303,56 +205,36 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   migrateDocuments(config: MigrationConfig): this {
-    this.parameters.push('action=MIGRATE')
-
-    if (config.collection) {
-      this.parameters.push(`collection=${encodeURIComponent(config.collection)}`)
-    }
-
-    if (config.targetCollection) {
-      this.parameters.push(`target.collection=${encodeURIComponent(config.targetCollection)}`)
-    }
-
-    if (config.splitKey) {
-      this.parameters.push(`split.key=${encodeURIComponent(config.splitKey)}`)
-    }
-
-    if (config.forwardTimeout !== undefined) {
-      this.parameters.push(`forward.timeout=${config.forwardTimeout}`)
-    }
-
-    if (config.async) {
-      this.parameters.push(`async=${encodeURIComponent(config.async)}`)
-    }
-
+    this.addParameter('action', 'MIGRATE', false)
+    this.addParameter('collection', config.collection)
+    this.addParameter('target.collection', config.targetCollection)
+    this.addParameter('split.key', config.splitKey)
+    this.addParameter('forward.timeout', config.forwardTimeout)
+    this.addParameter('async', config.async)
     return this
   }
 
   /**
    * Assigns a role to a node.
-   * @param options Configuration for adding the role.
+   * @param config Configuration for adding the role.
    * @returns This instance for method chaining.
    */
   addRole(config: ClusterRole): this {
-    this.parameters.push('action=ADDROLE')
-
-    if (config.role) this.parameters.push(`role=${encodeURIComponent(config.role)}`)
-    if (config.node) this.parameters.push(`node=${encodeURIComponent(config.node)}`)
-
+    this.addParameter('action', 'ADDROLE', false)
+    this.addParameter('role', config.role)
+    this.addParameter('node', config.node)
     return this
   }
 
   /**
    * Removes a role from a node.
-   * @param options Configuration for removing the role.
+   * @param config Configuration for removing the role.
    * @returns This instance for method chaining.
    */
   removeRole(config: ClusterRole): this {
-    this.parameters.push('action=REMOVEROLE')
-
-    if (config.role) this.parameters.push(`role=${encodeURIComponent(config.role)}`)
-    if (config.node) this.parameters.push(`node=${encodeURIComponent(config.node)}`)
-
+    this.addParameter('action', 'REMOVEROLE', false)
+    this.addParameter('role', config.role)
+    this.addParameter('node', config.node)
     return this
   }
 
@@ -361,7 +243,7 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   getOverseerStatus(): this {
-    this.parameters.push('action=OVERSEERSTATUS')
+    this.addParameter('action', 'OVERSEERSTATUS', false)
     return this
   }
 
@@ -370,7 +252,7 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   getClusterStatus(): this {
-    this.parameters.push('action=CLUSTERSTATUS')
+    this.addParameter('action', 'CLUSTERSTATUS', false)
     return this
   }
 
@@ -380,8 +262,8 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   requestStatus(requestId: string): this {
-    this.parameters.push('action=REQUESTSTATUS')
-    if (requestId) this.parameters.push(`requestid=${encodeURIComponent(requestId)}`)
+    this.addParameter('action', 'REQUESTSTATUS', false)
+    this.addParameter('requestid', requestId)
     return this
   }
 
@@ -390,7 +272,7 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   listCollections(): this {
-    this.parameters.push('action=LIST')
+    this.addParameter('action', 'LIST', false)
     return this
   }
 
@@ -399,33 +281,14 @@ export class Collection {
    * @param config Configuration for adding the replica property.
    * @returns This instance for method chaining.
    */
-  addReplicaProperty(config: ReplicaPropertyAddConfig): this {
-    this.parameters.push('action=ADDREPLICAPROP')
-
-    if (config.collection) {
-      this.parameters.push(`collection=${encodeURIComponent(config.collection)}`)
-    }
-
-    if (config.shard) {
-      this.parameters.push(`shard=${encodeURIComponent(config.shard)}`)
-    }
-
-    if (config.replica) {
-      this.parameters.push(`replica=${encodeURIComponent(config.replica)}`)
-    }
-
-    if (config.property) {
-      this.parameters.push(`property=${encodeURIComponent(config.property)}`)
-    }
-
-    if (config.propertyValue !== undefined) {
-      this.parameters.push(`property.value=${encodeURIComponent(config.propertyValue)}`)
-    }
-
-    if (config.shardUnique !== undefined) {
-      this.parameters.push(`shardUnique=${config.shardUnique}`)
-    }
-
+  addReplicaProperty(config: ReplicaPropertyConfig): this {
+    this.addParameter('action', 'ADDREPLICAPROP', false)
+    this.addParameter('collection', config.collection)
+    this.addParameter('shard', config.shard)
+    this.addParameter('replica', config.replica)
+    this.addParameter('property', config.property)
+    this.addParameter('property.value', config.propertyValue)
+    this.addParameter('shardUnique', config.shardUnique)
     return this
   }
 
@@ -435,24 +298,11 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   deleteReplicaProperty(config: ReplicaPropertyDeleteConfig): this {
-    this.parameters.push('action=DELETEREPLICAPROP')
-
-    if (config.collection) {
-      this.parameters.push(`collection=${encodeURIComponent(config.collection)}`)
-    }
-
-    if (config.shard) {
-      this.parameters.push(`shard=${encodeURIComponent(config.shard)}`)
-    }
-
-    if (config.replica) {
-      this.parameters.push(`replica=${encodeURIComponent(config.replica)}`)
-    }
-
-    if (config.property) {
-      this.parameters.push(`property=${encodeURIComponent(config.property)}`)
-    }
-
+    this.addParameter('action', 'DELETEREPLICAPROP', false)
+    this.addParameter('collection', config.collection)
+    this.addParameter('shard', config.shard)
+    this.addParameter('replica', config.replica)
+    this.addParameter('property', config.property)
     return this
   }
 
@@ -462,24 +312,11 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   balanceProperty(config: ShardBalanceConfig): this {
-    this.parameters.push('action=BALANCESHARDUNIQUE')
-
-    if (config.collection) {
-      this.parameters.push(`collection=${encodeURIComponent(config.collection)}`)
-    }
-
-    if (config.property) {
-      this.parameters.push(`property=${encodeURIComponent(config.property)}`)
-    }
-
-    if (config.onlyActiveNodes !== undefined) {
-      this.parameters.push(`onlyActiveNodes=${config.onlyActiveNodes}`)
-    }
-
-    if (config.shardUnique !== undefined) {
-      this.parameters.push(`shardUnique=${config.shardUnique}`)
-    }
-
+    this.addParameter('action', 'BALANCESHARDUNIQUE', false)
+    this.addParameter('collection', config.collection)
+    this.addParameter('property', config.property)
+    this.addParameter('onlyActiveNodes', config.onlyActiveNodes)
+    this.addParameter('shardUnique', config.shardUnique)
     return this
   }
 
@@ -489,20 +326,10 @@ export class Collection {
    * @returns This instance for method chaining.
    */
   rebalanceLeaders(config: LeaderRebalanceConfig): this {
-    this.parameters.push('action=REBALANCELEADERS')
-
-    if (config.collection) {
-      this.parameters.push(`collection=${encodeURIComponent(config.collection)}`)
-    }
-
-    if (config.maxAtOnce !== undefined) {
-      this.parameters.push(`maxAtOnce=${config.maxAtOnce}`)
-    }
-
-    if (config.maxWaitSeconds !== undefined) {
-      this.parameters.push(`maxWaitSeconds=${config.maxWaitSeconds}`)
-    }
-
+    this.addParameter('action', 'REBALANCELEADERS', false)
+    this.addParameter('collection', config.collection)
+    this.addParameter('maxAtOnce', config.maxAtOnce)
+    this.addParameter('maxWaitSeconds', config.maxWaitSeconds)
     return this
   }
 

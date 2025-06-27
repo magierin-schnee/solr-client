@@ -1,864 +1,581 @@
 import { Dispatcher } from 'undici'
 import { TlsOptions } from 'tls'
 
-// === Client Configuration Types ===
+//================================================================
+// SECTION 1: CLIENT AND RESOURCE CONFIGURATION
+//================================================================
 
 /**
- * Configuration options for HTTP requests using Undici, excluding 'origin' and 'path'
- * which are managed elsewhere in the Solr client. Includes optional TLS settings.
+ * Defines options for HTTP requests made by the client, using Undici's options
+ * as a base but omitting properties managed internally by the client.
  */
 export type HttpRequestOptions = Omit<Dispatcher.RequestOptions, 'origin' | 'path'> & {
-  /**
-   * TLS configuration for secure connections.
-   */
+  /** TLS configuration for establishing secure connections. */
   tls?: TlsOptions
 }
 
 /**
- * Defines options for resources used in Solr requests, such as files or remote URLs.
+ * Describes a resource to be used in a Solr request, such as a data file for indexing.
  */
-export type SolrResourceConfig = {
+export interface SolrResourceConfig {
+  /** The path to the resource, which can be a local file path or an HTTP URL. */
+  path: string
   /**
-   * Additional parameters to include in the query.
+   * The format of the resource content.
+   * @default 'xml'
    */
-  parameters?: Record<string, any>
-
+  format?: 'xml' | 'csv' | 'json'
   /**
-   * Format of the resource. Acceptable values are 'XML', 'CSV', or 'JSON'.
-   */
-  format?: string
-
-  /**
-   * MIME type of the resource, e.g., 'text/plain;charset=utf-8'.
+   * The MIME type of the resource, e.g., 'text/plain;charset=utf-8'.
    */
   contentType?: string
-
   /**
-   * Path to the resource, either a local file path (relative to Solr server's CWD) or an HTTP URL.
+   * Additional parameters to include in the resource request.
    */
-  path: string
+  parameters?: Record<string, any>
 }
 
 /**
- * Optional parameters to configure the Solr client connection and behavior.
+ * Defines the initial configuration options for creating a Solr client instance.
+ * Defaults are applied for any omitted optional properties.
  */
-export type SolrClientConfig = {
+export interface SolrClientConfig {
   /**
-   * Hostname or IP address of the Solr server. Defaults to 'localhost' if unspecified.
+   * The hostname or IP address of the Solr server.
+   * @default 'localhost'
    */
   host?: string
-
   /**
-   * Port number of the Solr server. Accepts string, number, or null. Defaults to 8983.
+   * The port number of the Solr server.
+   * @default 8983
    */
   port?: string | number | null
-
   /**
-   * Name of the Solr core to target. Optional; no core is used if omitted.
+   * The name of the Solr core or collection to target. If omitted, requests are sent without a core path.
    */
   core?: string
-
   /**
-   * Base path for all Solr requests. Defaults to '/solr'.
+   * The base path for all Solr API requests.
+   * @default '/solr'
    */
   path?: string
-
   /**
-   * Enables HTTPS for secure communication. Defaults to false.
+   * If true, communicates with Solr over HTTPS.
+   * @default false
    */
   secure?: boolean
-
   /**
-   * Uses JSONbig for handling large integers instead of native JSON. Defaults to false.
+   * If true, uses `json-bigint` to parse responses, preserving large integer precision.
+   * @default false
    */
   bigint?: boolean
-
   /**
-   * TLS settings for SSL connections.
+   * Global TLS settings for all secure connections.
    */
   tls?: TlsOptions
-
   /**
-   * Custom HTTP request options applied to all requests. Can be null.
+   * A custom Undici request options object to be applied to all requests.
    */
   request?: HttpRequestOptions | null
-
   /**
-   * IP version for network requests. Accepts 4 or 6. Defaults to 4.
+   * The IP version to use for network requests.
+   * @default 4
    */
-  ipVersion?: number
-
-  /**
-   * Maximum size (in bytes) for GET requests. Beyond this, POST is used. Accepts boolean or number.
-   */
-  get_max_request_entity_size?: boolean | number
+  ipVersion?: 4 | 6
 }
 
 /**
- * Mandatory configuration for the Solr client, requiring all fields except optional ones.
- * Includes an optional authorization field for authenticated requests.
+ * Represents the resolved, non-optional configuration state of the client after initialization.
+ * This is an internal type used by the client after defaults have been applied.
  */
-export type CompleteSolrClientConfig = {
+export interface ResolvedSolrClientConfig {
   host: string
   port: string | number
   core: string
   path: string
   secure: boolean
   bigint: boolean
+  ipVersion: 4 | 6
   tls?: TlsOptions
   request?: HttpRequestOptions | null
-  ipVersion: number
-  get_max_request_entity_size: boolean | number
-  /**
-   * Authorization header or token for authenticated requests, if required.
-   */
+  /** The full 'Authorization' header value, if authentication is required. */
   authorization?: string
 }
 
-// === Query Operation Types ===
+//================================================================
+// SECTION 2: QUERY PARAMETER CONFIGURATIONS
+//================================================================
 
 /**
- * Configuration for date range queries in Solr.
+ * Defines a date range filter for a query.
  */
-export type DateRangeConfig = {
-  /**
-   * Field to apply the date range filter to.
-   */
+export interface DateRangeConfig {
+  /** The date field to apply the range filter on. */
   field: string
-  /**
-   * Start of the range, as a string, timestamp (number), or Date object.
-   */
+  /** The start of the date range. */
   start?: string | number | Date
-  /**
-   * End of the range, as a string, timestamp (number), or Date object.
-   */
+  /** The end of the date range. */
   end?: string | number | Date
 }
 
 /**
- * Configuration for joining collections or indexes in Solr queries.
+ * Defines a join between collections or cores.
  */
-export type JoinConfig = {
-  /**
-   * Source field for the join.
-   */
+export interface JoinConfig {
+  /** The field in the source collection. */
   from: string
-  /**
-   * Target field for the join.
-   */
+  /** The field in the target collection. */
   to: string
-  /**
-   * Index or collection to join from.
-   */
+  /** The source collection or core to join from. */
   fromIndex: string
-  /**
-   * Field to filter during the join.
-   */
-  field: string
-  /**
-   * Value to match in the join filter.
-   */
-  value: string | number | Date | boolean
+  /** An optional filter query to apply to the joined documents. */
+  query?: string
 }
 
 /**
- * Defines filter query options for Solr.
+ * Configures result grouping (field collapsing).
  */
-export type Filters = {
-  /**
-   * Field to apply the filter to.
-   */
-  field: string
-  /**
-   * Value to filter by.
-   */
-  value: string | number | Date | boolean
-  /**
-   * Optional settings for filter matching behavior.
-   */
-  matchFilterOptions?: MatchFilterOptions
-}
-
-/**
- * Options for grouping query results in Solr.
- */
-export type GroupingConfig = {
-  /**
-   * Enables grouping of results.
-   */
+export interface GroupingConfig {
   on?: boolean
-  /**
-   * Field(s) to group by.
-   */
   field?: string | string[]
-  /**
-   * Query or queries defining the groups.
-   */
-  query?: Record<string, any> | Record<string, any>[]
-  /**
-   * Maximum number of groups to return.
-   */
+  query?: string | string[]
   limit?: number
-  /**
-   * Starting offset for group results.
-   */
   offset?: number
-  /**
-   * Sorting criteria for groups.
-   */
   sort?: string
-  /**
-   * Format of the grouped response.
-   */
-  format?: string
-  /**
-   * Includes the main result set with grouped data.
-   */
+  format?: 'grouped' | 'simple'
   main?: boolean
-  /**
-   * Returns the total number of groups.
-   */
   ngroups?: boolean
-  /**
-   * Truncates group results if true.
-   */
   truncate?: boolean
-  /**
-   * Cache percentage for grouping operations.
-   */
   cache?: number
 }
 
 /**
- * Configuration for faceting in Solr queries.
+ * Configures a "More Like This" (MLT) query component.
  */
-export type FacetConfig = {
-  /**
-   * Enables faceting.
-   */
+export interface MoreLikeThisConfig {
   on?: boolean
-  /**
-   * Query to drive faceting.
-   */
-  query?: string
-  /**
-   * Field(s) to facet on.
-   */
-  field: string | string[]
-  /**
-   * Filters facet values by prefix.
-   */
-  prefix?: string
-  /**
-   * Sorting order for facet results.
-   */
-  sort?: string
-  /**
-   * Maximum number of facets to return.
-   */
-  limit?: number
-  /**
-   * Offset for facet results.
-   */
-  offset?: number
-  /**
-   * Minimum count for a facet to be included.
-   */
-  mincount?: number
-  /**
-   * Includes missing facet values if true.
-   */
-  missing?: boolean
-  /**
-   * Faceting method to use.
-   */
-  method?: string
-  /**
-   * Configuration for pivot faceting.
-   */
-  pivot: PivotConfig
-}
-
-/**
- * Configuration for pivot faceting in Solr.
- */
-export type PivotConfig = {
-  /**
-   * Minimum count for a pivot to be included.
-   */
-  mincount?: number
-  /**
-   * Fields to pivot on.
-   */
-  fields: string[]
-}
-
-/**
- * Configuration for "More Like This" (MLT) queries in Solr.
- */
-export type MoreLikeThisConfig = {
-  /**
-   * Enables MLT functionality.
-   */
-  on?: boolean
-  /**
-   * Fields to use for similarity.
-   */
-  fl?: string | string[]
-  /**
-   * Number of similar documents to return.
-   */
+  /** The fields to use for calculating similarity. */
+  fl: string | string[]
   count?: number
-  /**
-   * Minimum term frequency for similarity.
-   */
-  mintf?: number
-  /**
-   * Minimum document frequency for similarity.
-   */
-  mindf?: number
-  /**
-   * Minimum word length for terms.
-   */
-  minwl?: number
-  /**
-   * Maximum word length for terms.
-   */
-  maxwl?: number
-  /**
-   * Maximum query terms to consider.
-   */
-  maxqt?: number
-  /**
-   * Maximum number of tokens to parse.
-   */
-  maxntp?: number
-  /**
-   * Boosts query terms if true.
-   */
+  mintf?: number // Minimum Term Frequency
+  mindf?: number // Minimum Document Frequency
+  minwl?: number // Minimum Word Length
+  maxwl?: number // Maximum Word Length
+  maxqt?: number // Maximum Query Terms
+  maxntp?: number // Maximum Number of Tokens to Parse
   boost?: boolean
-  /**
-   * Query fields with optional weights.
-   */
-  qf?: string | Record<string, any>
+  /** Query fields and their optional boost values. */
+  qf?: string | Record<string, number>
 }
 
 /**
- * Configuration for highlighting search results in Solr.
+ * Configures search result highlighting.
  */
-export type HighlightConfig = {
-  /**
-   * Enables highlighting.
-   */
+export interface HighlightConfig {
   on?: boolean
-  /**
-   * Query for highlighting.
-   */
-  q?: Record<string, any> | string
-  /**
-   * Query parser to use.
-   */
+  q?: string | Record<string, any>
   qparser?: string
-  /**
-   * Fields to highlight.
-   */
-  fl?: Record<string, any> | string
-  /**
-   * Number of snippets to return.
-   */
+  fl?: string | string[]
   snippets?: number
-  /**
-   * Size of each snippet in characters.
-   */
   fragsize?: number
-  /**
-   * Merges contiguous fragments if true.
-   */
   mergeContiguous?: boolean
-  /**
-   * Maximum characters to analyze.
-   */
   maxAnalyzedChars?: number
-  /**
-   * Max multi-valued fields to examine.
-   */
   maxMultiValuedToExamine?: number
-  /**
-   * Max multi-valued fields to match.
-   */
   maxMultiValuedToMatch?: number
-  /**
-   * Field to use if no match is found.
-   */
   alternateField?: string
-  /**
-   * Maximum length of the alternate field.
-   */
   maxAlternateFieldLength?: number
-  /**
-   * Formatting style for highlights.
-   */
-  formatter?: string
-  /**
-   * Prefix for highlighted text.
-   */
+  formatter?: 'simple'
   simplePre?: string
-  /**
-   * Suffix for highlighted text.
-   */
   simplePost?: string
-  /**
-   * Fragmenter to use for splitting text.
-   */
-  fragmenter?: string
-  /**
-   * Highlights multi-term queries if true.
-   */
+  fragmenter?: 'gap' | 'regex'
   highlightMultiTerm?: boolean
-  /**
-   * Requires field match for highlighting.
-   */
   requireFieldMatch?: boolean
-  /**
-   * Uses phrase highlighter if true.
-   */
   usePhraseHighlighter?: boolean
-  /**
-   * Slop for regex highlighting.
-   */
   regexSlop?: number
-  /**
-   * Regex pattern for highlighting.
-   */
   regexPattern?: string
-  /**
-   * Max characters for regex analysis.
-   */
   regexMaxAnalyzedChars?: number
-  /**
-   * Preserves multi-value order if true.
-   */
   preserveMulti?: boolean
-  /**
-   * Includes payloads in highlights.
-   */
   payloads?: boolean
 }
 
 /**
- * Configuration for term queries in Solr.
+ * Configures a Terms Component query.
  */
-export type TermsConfig = {
-  /**
-   * Enables term queries.
-   */
+export interface TermsConfig {
   on?: boolean
-  /**
-   * Field to query terms from.
-   */
   fl: string
-  /**
-   * Lower bound for terms.
-   */
   lower?: string
-  /**
-   * Includes lower bound if true.
-   */
   lowerIncl?: boolean
-  /**
-   * Minimum count for terms.
-   */
   mincount?: number
-  /**
-   * Maximum count for terms.
-   */
   maxcount?: number
-  /**
-   * Prefix filter for terms.
-   */
   prefix?: string
-  /**
-   * Regex pattern for term matching.
-   */
   regex?: string
-  /**
-   * Flags for regex matching.
-   */
   regexFlag?: string
-  /**
-   * Maximum number of terms to return.
-   */
   limit?: number
-  /**
-   * Upper bound for terms.
-   */
   upper?: string
-  /**
-   * Includes upper bound if true.
-   */
   upperIncl?: boolean
-  /**
-   * Returns raw term data if true.
-   */
   raw?: boolean
-  /**
-   * Sort order for terms.
-   */
-  sort?: string
+  sort?: 'count' | 'index'
 }
 
-// === Collection Management Types ===
+//================================================================
+// SECTION 3: COLLECTION & CLUSTER MANAGEMENT
+//================================================================
 
 /**
- * Options for creating a new Solr collection.
+ * Defines options for creating a new SolrCloud collection.
  */
-export type CollectionCreateConfig = {
-  /**
-   * Name of the collection to create.
-   */
+export interface CollectionCreateConfig {
   name: string
-  /**
-   * Name of the router to use.
-   */
-  routerName?: string
-  /**
-   * Number of shards for the collection.
-   */
+  routerName?: 'compositeId' | 'implicit'
   numShards?: number
-  /**
-   * Specific shards to create.
-   */
   shards?: string | string[]
-  /**
-   * Replication factor for shards.
-   */
   replicationFactor?: number
-  /**
-   * Maximum shards per node.
-   */
   maxShardsPerNode?: number
-  /**
-   * Nodes to create the collection on.
-   */
-  createNodeSet?: string | string[]
-  /**
-   * Shuffles node set if true.
-   */
+  createNodeSet?: string | string[] | 'EMPTY'
   createNodeSetShuffle?: boolean
-  /**
-   * Configuration name for the collection.
-   */
   collectionConfigName?: string
-  /**
-   * Field to use for routing.
-   */
   routerField?: string
-  /**
-   * Automatically adds replicas if true.
-   */
   autoAddReplicas?: boolean
-  /**
-   * Asynchronous request ID, if any.
-   */
   async?: string
 }
 
 /**
- * Configuration for splitting a shard in a Solr collection.
+ * Configures the splitting of a single shard.
  */
-export type ShardSplitConfig = {
-  /**
-   * Collection containing the shard.
-   */
+export interface ShardSplitConfig {
   collection: string
-  /**
-   * Shard to split.
-   */
   shard: string
-  /**
-   * Ranges to split the shard into.
-   */
   ranges?: string | string[]
-  /**
-   * Key to split the shard by.
-   */
   splitKey?: string
-  /**
-   * Asynchronous request ID, if any.
-   */
   async?: string
 }
 
 /**
- * Configuration for creating/deleting a shard in a Solr collection.
+ * Identifies a shard for creation or deletion.
  */
-export type ShardConfig = {
-  /**
-   * Collection the shard belongs to.
-   */
+export interface ShardConfig {
   collection: string
-  /**
-   * Name of the shard.
-   */
   shard: string
 }
 
 /**
- * Configuration for creating an alias in Solr.
+ * Defines a collection alias.
  */
-export type AliasConfig = {
-  /**
-   * Name of the alias.
-   */
+export interface AliasConfig {
   name: string
-  /**
-   * Collection(s) the alias points to.
-   */
   collections: string | string[]
 }
 
 /**
- * Configuration for deleting a replica in Solr.
+ * Identifies a replica for deletion.
  */
-export type ReplicaDeleteConfig = {
-  /**
-   * Collection containing the replica.
-   */
+export interface ReplicaDeleteConfig {
   collection: string
-  /**
-   * Shard containing the replica.
-   */
   shard: string
-  /**
-   * Name of the replica to delete.
-   */
   replica: string
-  /**
-   * Deletes only if the replica is down.
-   */
-  onlyIfDown: boolean
+  onlyIfDown?: boolean
 }
 
 /**
- * Configuration for adding a replica to a Solr collection.
+ * Configures the addition of a new replica.
  */
-export type ReplicaAddConfig = {
-  /**
-   * Collection to add the replica to.
-   */
-  collection?: string
-  /**
-   * Shard to add the replica to.
-   */
-  shard?: string
-  /**
-   * Routing key for the replica.
-   */
-  route?: string
-  /**
-   * Node to place the replica on.
-   */
-  node?: string
-  /**
-   * Asynchronous request ID, if any.
-   */
-  async?: string
-}
-
-/**
- * Configuration for setting cluster properties in Solr.
- */
-export type ClusterPropertyConfig = {
-  /**
-   * Name of the property to set.
-   */
-  name?: string
-  /**
-   * Value of the property.
-   */
-  val?: string | boolean | number
-}
-
-/**
- * Configuration for migrating data between Solr collections.
- */
-export type MigrationConfig = {
-  /**
-   * Source collection for migration.
-   */
+export interface ReplicaAddConfig {
   collection: string
-  /**
-   * Target collection for migration.
-   */
-  targetCollection: string
-  /**
-   * Key to split data by during migration.
-   */
-  splitKey: string
-  /**
-   * Timeout for forwarding requests, in seconds.
-   */
-  forwardTimeout?: number
-  /**
-   * Asynchronous request ID, if any.
-   */
+  shard: string
+  route?: string
+  node?: string
   async?: string
 }
 
 /**
- * Defines a role assignment in a Solr cluster.
+ * Defines a cluster-level property.
  */
-export type ClusterRole = {
-  /**
-   * Role to assign (e.g., overseer).
-   */
-  role: string
-  /**
-   * Node to assign the role to.
-   */
+export interface ClusterPropertyConfig {
+  name: string
+  val: string | boolean | number | null
+}
+
+/**
+ * Configures a data migration between collections.
+ */
+export interface MigrationConfig {
+  collection: string
+  targetCollection: string
+  splitKey: string
+  forwardTimeout?: number
+  async?: string
+}
+
+/**
+ * Assigns a role to a node in the cluster.
+ */
+export interface ClusterRole {
+  role: 'overseer'
   node: string
 }
 
 /**
- * Configuration for adding a property to a replica in Solr.
+ * Configures adding or updating a property on a replica.
  */
-export type ReplicaPropertyAddConfig = {
-  /**
-   * Collection containing the replica.
-   */
+export interface ReplicaPropertyConfig {
   collection: string
-  /**
-   * Shard containing the replica.
-   */
   shard: string
-  /**
-   * Name of the replica.
-   */
   replica: string
-  /**
-   * Property name to add.
-   */
   property: string
-  /**
-   * Value of the property.
-   */
   propertyValue: string | boolean | number
-  /**
-   * Ensures property uniqueness across shards.
-   */
   shardUnique?: boolean
 }
 
 /**
- * Configuration for deleting a property from a replica in Solr.
+ * Identifies a replica property for deletion.
  */
-export type ReplicaPropertyDeleteConfig = {
-  /**
-   * Collection containing the replica.
-   */
+export interface ReplicaPropertyDeleteConfig {
   collection: string
-  /**
-   * Shard containing the replica.
-   */
   shard: string
-  /**
-   * Name of the replica.
-   */
   replica: string
-  /**
-   * Property name to delete.
-   */
   property: string
 }
 
 /**
- * Configuration for balancing shard properties in Solr.
+ * Configures balancing of a property across shards.
  */
-export type ShardBalanceConfig = {
-  /**
-   * Collection to balance.
-   */
+export interface ShardBalanceConfig {
   collection: string
-  /**
-   * Property to balance across shards.
-   */
   property: string
-  /**
-   * Balances only active nodes if true.
-   */
   onlyActiveNodes?: boolean
-  /**
-   * Ensures property uniqueness if true.
-   */
   shardUnique?: boolean
 }
 
 /**
- * Configuration for rebalancing leaders in a Solr collection.
+ * Configures the rebalancing of shard leaders.
  */
-export type LeaderRebalanceConfig = {
-  /**
-   * Collection to rebalance leaders for.
-   */
+export interface LeaderRebalanceConfig {
   collection: string
-  /**
-   * Maximum number of leaders to rebalance at once.
-   */
   maxAtOnce?: number
-  /**
-   * Maximum wait time for rebalancing, in seconds.
-   */
   maxWaitSeconds?: number
 }
 
-// === Response Types ===
+//================================================================
+// SECTION 4: JSON FACET API (REQUEST)
+//================================================================
 
 /**
- * Response structure for adding documents to Solr.
+ * Defines the execution domain for a facet, allowing for advanced filtering.
  */
-export type DocumentAddResponse = {
+export type JsonFacetDomain = {
+  /** Excludes filters with the specified tag(s) from the facet computation. Essential for multi-select faceting. */
+  excludeTags?: string | string[]
+  /** Applies a filter to the domain. Can be a simple query string or a more complex join/graph query. */
+  filter?: string | string[]
+  graph?: string | Record<string, string>
+  blockParent?: string
+  blockChildren?: string
+}
+
+/** The top-level facet configuration object. */
+export type JsonFacetConfig = Record<string, AnyFacetDefinition | StatFunction>
+
+/** Base properties for all facet definitions. */
+export interface JsonFacetBase {
+  domain?: JsonFacetDomain
+  facet?: JsonFacetConfig
+}
+
+/** 'terms' facet configuration. */
+export interface JsonTermsFacet extends JsonFacetBase {
+  type: 'terms'
+  field: string
+  limit?: number
+  offset?: number
+  mincount?: number
+  missing?: boolean
+  numBuckets?: boolean
+  allBuckets?: boolean
+  sort?: string | Record<string, 'asc' | 'desc'>
+  prefix?: string
+  method?: 'dv' | 'stream' | 'uif'
+}
+
+/** 'range' facet configuration for bucketing documents over a numeric or date field. */
+export interface JsonRangeFacet extends JsonFacetBase {
+  type: 'range'
+  field: string
+  start: string | number | Date
+  end: string | number | Date
+  gap: string | number
+  hardend?: boolean
+  other?: 'before' | 'after' | 'between' | 'all' | 'none'
+  include?: 'lower' | 'upper' | 'edge' | 'outer' | 'all'
   /**
-   * List of documents or IDs added to Solr.
+   * List of arbitrary ranges. When specified, calculates facets on these given ranges
+   * rather than start, gap, and end.
+   * Specifying start, end, or gap along with ranges is disallowed.
    */
-  adds: any[]
+  ranges?: (JsonArbitraryRange | JsonArbitraryRangeString)[]
+}
+
+/** Defines a single arbitrary range for a range facet using 'from' and 'to' bounds. */
+export interface JsonArbitraryRange {
+  /** The lower bound of the range. Defaults to '*' if not specified. */
+  from?: string | number | Date
+  /** The upper bound of the range. Defaults to '*' if not specified. */
+  to?: string | number | Date
+  /** If true, includes the lower bound 'from'. Defaults to true. */
+  inclusive_from?: boolean
+  /** If true, includes the upper bound 'to'. Defaults to false. */
+  inclusive_to?: boolean
+}
+
+/** Defines a single arbitrary range for a range facet using a string representation. */
+export interface JsonArbitraryRangeString {
+  /** The range specified as a string (e.g., "[40,100)").
+   * Semantically similar to `facet.interval`.
+   */
+  range: string
+}
+
+/** 'query' facet configuration with single query. */
+export interface JsonQueryFacet extends JsonFacetBase {
+  type: 'query'
+  q: string
+}
+
+/** 'query' facet configuration with multiple named buckets. */
+export interface JsonMultiQueryFacet extends JsonFacetBase {
+  type: 'query'
+  queries: Record<string, string>
+}
+
+/** A union of possible facet definitions. */
+export type AnyFacetDefinition =
+  | JsonTermsFacet
+  | JsonRangeFacet
+  | JsonQueryFacet
+  | JsonMultiQueryFacet
+
+/** Represents a statistical function, e.g., "avg(price)". */
+export type StatFunction = string | Record<string, string | { field: string }>
+
+//================================================================
+// SECTION 5: API RESPONSE & ERROR HANDLING
+//================================================================
+
+/** The result of a simple statistical aggregation function, which is typically a number. */
+export type SolrStatResult = number
+
+/**
+ * A block of facet and stat results. This is the core recursive structure.
+ * It's a map from user-defined names (e.g., "avg_price", "categories") to their results.
+ */
+export type SolrFacetResultBlock = {
+  [facetOrStatName: string]: AnySolrFacetResult | SolrStatResult | undefined
+}
+
+/** Represents a single bucket within a `terms` or `range` facet response. */
+export type SolrTermsBucket = {
+  /** The value of the bucket (e.g., "electronics", 2024). */
+  val: string | number
+  /** The number of documents in this bucket. */
+  count: number
+} & SolrFacetResultBlock
+
+/** The response structure for a `terms` or `range` facet, which returns an array of buckets. */
+export type SolrTermsFacetResult = {
+  buckets: SolrTermsBucket[]
+  /** The total number of unique terms, only present if `numBuckets:true` was in the request. */
+  numBuckets?: number
+}
+
+/**
+ * The response for a single named `query` facet or a nested structure of named buckets.
+ * This is used for your `price` and `modelYear` facets.
+ */
+export type SolrQueryFacetResult = {
+  /** The total count of documents for this entire facet block. */
+  count: number
+} & SolrFacetResultBlock
+
+/** A discriminated union of all possible result structures for a single facet. */
+export type AnySolrFacetResult = SolrTermsFacetResult | SolrQueryFacetResult
+
+/** The top-level response object for the entire `facets` key returned by Solr. */
+export type SolrFacetsResponse = {
+  /** The total number of documents matching the main query and filters. */
+  count: number
+} & SolrFacetResultBlock
+
+/** A generic representation of a single document returned by Solr. */
+export type SolrDocument = Record<string, unknown>
+
+/** Models the 'responseHeader' object from a Solr response. */
+export interface SolrResponseHeader {
+  status: number
+  QTime: number
+  params: Record<string, string | number | boolean>
+}
+
+/** Models the 'response' object containing the main search results. */
+export interface SolrSearchResponse<T extends SolrDocument> {
+  numFound: number
+  start: number
+  numFoundExact: boolean
+  docs: T[]
+}
+
+/** Models the structure of the error object returned by Solr in the response body. */
+export interface SolrErrorBody {
+  metadata: string[]
+  msg: string
+  code: number
+}
+
+/**
+ * The complete, top-level type for a standard Solr API response.
+ * @template T - The specific type for the documents in the response.
+ */
+export interface SolrApiResponse<T extends SolrDocument = SolrDocument> {
+  responseHeader: SolrResponseHeader
+  response: SolrSearchResponse<T>
+  /** Results from the JSON Facet API. Only present if `json.facet` was in the request. */
+  facets?: SolrFacetsResponse
+  /** Error details, only present if the query failed. */
+  error?: SolrErrorBody
+  /** Results from the legacy facet parameters. Only present if `facet=true` was in the request. */
+  facet_counts?: Record<string, any>
+  /** A list of document IDs that were added or updated, for update commands. */
+  adds?: (string | number)[]
+}
+
+/**
+ * A custom error class for handling errors from Solr.
+ * It provides direct access to both the HTTP status and the specific error
+ * details returned in the Solr response body.
+ */
+export class SolrError extends Error {
+  /** The HTTP status code of the failed response (e.g., 400, 404, 500). */
+  public readonly httpStatusCode: number
+
+  /** The specific error code returned by Solr in the response body (e.g., 400). */
+  public readonly solrCode: number
+
+  /** The detailed error metadata from the Solr response body, if available. */
+  public readonly metadata?: string[]
+
   /**
-   * Metadata about the response.
+   * Constructs a SolrError instance.
+   * @param httpStatusCode The HTTP status code from the response.
+   * @param errorBody The 'error' object from the Solr JSON response.
    */
-  responseHeader: {
-    /**
-     * Operation status code (0 for success).
-     */
-    status: number
-    /**
-     * Query execution time in milliseconds.
-     */
-    QTime: number
+  constructor(httpStatusCode: number, errorBody: SolrErrorBody) {
+    const message = `Solr request failed with HTTP status ${httpStatusCode} and Solr code ${errorBody.code}: ${errorBody.msg}`
+    super(message)
+
+    this.name = 'SolrError'
+    this.httpStatusCode = httpStatusCode
+    this.solrCode = errorBody.code
+    this.metadata = errorBody.metadata
+
+    Object.setPrototypeOf(this, SolrError.prototype)
   }
-}
-
-/**
- * Generic JSON response data from Solr queries.
- */
-export type SolrJsonResponse = Record<string, any> | any[]
-
-/**
- * Standard response format for Solr operations.
- */
-export type SolrCommonResponse = {
-  /**
-   * Metadata about the operation, including status and timing.
-   */
-  responseHeader: Record<string, any>
-}
-
-// === Miscellaneous Types ===
-
-/**
- * Options for customizing filter matching behavior in Solr.
- */
-export type MatchFilterOptions = {
-  /**
-   * Enables complex phrase matching for filters.
-   */
-  complexPhrase?: boolean
 }
